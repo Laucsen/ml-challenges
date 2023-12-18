@@ -8,12 +8,17 @@ class ImputeDesignerExecutor:
     def __init__(self, tfs: ImputeDesigner):
         self.tfs = tfs
 
-    def execute(self, dataframe: pd.DataFrame):
+    def execute(self, dataframe: pd.DataFrame, filter=None):
         operations = self.tfs.getOperations()
         for op in operations:
             cop_name = op.getColumnName()
             cop_op = op.getOperation()
             cop_options = op.getOptions()
+            cop_filters = op.getFilters()
+
+            if filter:
+                if filter in cop_filters:
+                    continue
 
             if cop_op == IDOperations.DROP:
                 dataframe = dataframe.drop(cop_name, axis=1)

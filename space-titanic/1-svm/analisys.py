@@ -21,117 +21,100 @@ from il.id.ImputeDesignerExecutor import ImputeDesignerExecutor
 # =========================================================
 # =========================================================
 
+
 # Function to list the artifacts
-
-
 def listArtifacts(path):
     for dirname, _, filenames in os.walk(path):
         for filename in filenames:
             print(os.path.join(dirname, filename))
 
 
-# Load train data frame from csv
-def loadDataFrame(train):
+# Load csv into a DataFrame (pandas)
+def loadDataFrame(file_path):
     # Load a dataset into a Pandas Dataframe
-    dataset_df = pd.read_csv(train)
-    print("Full train dataset shape is {}".format(dataset_df.shape))
-    # Display the first 5 examples
-    print(dataset_df.head(5))
-
-    # Describe
-    print(dataset_df.describe())
-
-    return dataset_df
+    return pd.read_csv(file_path)
 
 
 # Cleans the table. Various operations are performed here to prepare the table for training and prediction.
 def manipulateTable(dataset, testing=False):
-    tms = ImputeDesigner()
-
-    # Create a definition of what is to do
-    # Dropping PasengerId and Name
-    tms.add('PassengerId', IDOperations.DROP)
-    tms.add('Name', IDOperations.DROP)
-    # Fill CryoSleep nana with Unknown and apply One Hot
-    tms.add('CryoSleep', IDOperations.TO_STR)
-    tms.add('CryoSleep', IDOperations.REPLACE,
-            {'match': 'nan',
-             'value': 'Unknown'})
-    tms.add('CryoSleep', IDOperations.ONE_HOT)
-    # Fill empty values on VIP with mode
-    tms.add('VIP', IDOperations.FILL_NAN, {'strategy': 'most_frequent'})
-    tms.add('VIP', IDOperations.TO_INT)
-
-    # TODO: think if is better to have an if like this, or a param on add to execute on test mode
-    # Convedrt Transported to 0 or 1
-    if not testing:
-        # This column is not present when training
-        tms.add('Transported', IDOperations.TO_INT)
-
-    # Split Cabin and drop old column
-    tms.add('Cabin', IDOperations.SPLIT_BY,
-            {'pattern': '/',
-             'new_columns': ['Deck', 'Cabin_num', 'Side']})
-    tms.add('Cabin', IDOperations.DROP)
-
-    # Work on newly created columns
-    # Fill nan with Mode and apply One Hot
-    tms.add('Deck', IDOperations.FILL_NAN,
-            {'strategy': 'most_frequent'})
-    tms.add('Deck', IDOperations.ONE_HOT)
-    # Fill nana with zeroes and convert to int
-    tms.add('Cabin_num', IDOperations.FILL_NAN,
-            {'strategy': 'constant',
-             'fill_value': 0})
-    tms.add('Cabin_num', IDOperations.TO_INT)
-    # Encode to binary. P are tru and other are false.
-    tms.add('Side', IDOperations.ENCODE_TO_BINARY,
-            {'positive_label': 'P'})
-
-    # Fill nan for: (replace with Mode)
-    tms.add('FoodCourt', IDOperations.FILL_NAN,
-            {'strategy': 'most_frequent'})
-    tms.add('ShoppingMall', IDOperations.FILL_NAN,
-            {'strategy': 'most_frequent'})
-    tms.add('Spa', IDOperations.FILL_NAN,
-            {'strategy': 'most_frequent'})
-    tms.add('VRDeck', IDOperations.FILL_NAN,
-            {'strategy': 'most_frequent'})
-    tms.add('RoomService', IDOperations.FILL_NAN,
-            {'strategy': 'most_frequent'})
-
-    # Filling nan with Unknown and apply One Hot
-    tms.add('HomePlanet', IDOperations.FILL_NAN,
-            {'strategy': 'constant',
-             'fill_value': 'Unknown'})
-    tms.add('HomePlanet', IDOperations.ONE_HOT)
-    tms.add('Destination', IDOperations.FILL_NAN,
-            {'strategy': 'constant',
-             'fill_value': 'Unknown'})
-    tms.add('Destination', IDOperations.ONE_HOT)
-
-    # Fill age with median
-    tms.add('Age', IDOperations.FILL_NAN,
-            {'strategy': 'median'})
-
-    # Create a new feature, calle TotalSpent, with all money spent by each traveler
+    # Function to crete new columns about total spent
     def fn(df): return df['RoomService'] + df['FoodCourt'] + \
         df['ShoppingMall'] + df['Spa'] + df['VRDeck']
-    tms.add('TotalSpent', IDOperations.CREATE_NEW_COLUMN,
-            {'function': fn})
-
-    # Lets supose that, people on cryo sleep will never spend money on stuff...
+    # Columns to set to zero when the traveler is on Cryo
     columns_to_zero = ['TotalSpent', 'RoomService',
                        'FoodCourt', 'ShoppingMall', 'Spa', 'VRDeck']
-    tms.add(columns_to_zero,
-            IDOperations.CONDITIONAL_SET_TO,
+
+    # Design table modifications
+    tms = ImputeDesigner([
+        # 1. Dropping PasengerId and Name
+        ['PassengerId', IDOperations.DROP],
+        ['Name', IDOperations.DROP],
+        # 2. Fill CryoSleep nan with Unknown and apply One Hot
+        ['CryoSleep', IDOperations.TO_STR],
+        ['CryoSleep', IDOperations.REPLACE, {
+            'match': 'nan',
+            'value': 'Unknown'}],
+        ['CryoSleep', IDOperations.ONE_HOT],
+        # Fill empty values on VIP with mode
+        ['VIP', IDOperations.FILL_NAN, {'strategy': 'most_frequent'}],
+        ['VIP', IDOperations.TO_INT],
+        # Transform Transported to Int, but not on test set
+        # Passing empty options and the filter paramether
+        ['Transported', IDOperations.TO_INT, {}, ['test']],
+        # Split Cabin and drop old column
+        ['Cabin', IDOperations.SPLIT_BY, {
+            'pattern': '/',
+            'new_columns': ['Deck', 'Cabin_num', 'Side']}],
+        ['Cabin', IDOperations.DROP],
+        # Work on newly created columns
+        # Fill nan with Mode and apply One Hot
+        ['Deck', IDOperations.FILL_NAN,
+            {'strategy': 'most_frequent'}],
+        ['Deck', IDOperations.ONE_HOT],
+        # Fill nana with zeroes and convert to int
+        ['Cabin_num', IDOperations.FILL_NAN,
+            {'strategy': 'constant',
+             'fill_value': 0}],
+        ['Cabin_num', IDOperations.TO_INT],
+        # Encode to binary. P are tru and other are false.
+        ['Side', IDOperations.ENCODE_TO_BINARY,
+            {'positive_label': 'P'}],
+        # Fill nan for: (replace with Mode)
+        ['FoodCourt', IDOperations.FILL_NAN,
+            {'strategy': 'most_frequent'}],
+        ['ShoppingMall', IDOperations.FILL_NAN,
+            {'strategy': 'most_frequent'}],
+        ['Spa', IDOperations.FILL_NAN,
+            {'strategy': 'most_frequent'}],
+        ['VRDeck', IDOperations.FILL_NAN,
+            {'strategy': 'most_frequent'}],
+        ['RoomService', IDOperations.FILL_NAN,
+            {'strategy': 'most_frequent'}],
+        # Filling nan with Unknown and apply One Hot
+        ['HomePlanet', IDOperations.FILL_NAN,
+            {'strategy': 'constant',
+             'fill_value': 'Unknown'}],
+        ['HomePlanet', IDOperations.ONE_HOT],
+        ['Destination', IDOperations.FILL_NAN,
+            {'strategy': 'constant',
+             'fill_value': 'Unknown'}],
+        ['Destination', IDOperations.ONE_HOT],
+        # Fill age with median
+        ['Age', IDOperations.FILL_NAN,
+            {'strategy': 'median'}],
+        # Create a new feature, calle TotalSpent, with all money spent by each traveler
+        ['TotalSpent', IDOperations.CREATE_NEW_COLUMN, {'function': fn}],
+        # Lets supose that, people on cryo sleep will never spend money on stuff...
+        [columns_to_zero, IDOperations.CONDITIONAL_SET_TO,
             {'value': 0,
              'condition_col': 'CryoSleep_True',
-             'condition_value': 1})
+             'condition_value': 1}],
+    ])
 
     # Execute the definition over the dataframe
+    isTesting = 'test' if testing else None
     tme = ImputeDesignerExecutor(tms)
-    return tme.execute(dataset)
+    return tme.execute(dataset, filter=isTesting)
 
 
 # Execute Cross Validation with a given pipeline and values
@@ -317,7 +300,7 @@ pipeline = trainingTime(pipeline, X, y)
 # ----------
 # Submission - Testing Time
 (n_predictions, output) = testingTime(pipeline, f'{data_path}/test.csv')
-print(output.head())
+# print(output.head())
 # ----------
 # Generate Submission File
 # generateSubmissionFile(n_predictions, working_path)
