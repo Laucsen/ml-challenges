@@ -2,7 +2,7 @@ import enum
 
 
 # Definindo a enumeração
-class TalbeModificatorOperationsEnum(enum.Enum):
+class IDOperations(enum.Enum):
     DROP = 1
     TO_STR = 2
     TO_INT = 3

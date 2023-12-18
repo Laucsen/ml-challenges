@@ -1,0 +1,8 @@
+# Bytecode compilado
+__pycache__/
+*.pyc
+
+# Outros arquivos e diretórios comuns a ignorar
+.DS_Store
+.env
+.venv

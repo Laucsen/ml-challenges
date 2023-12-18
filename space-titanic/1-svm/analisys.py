@@ -11,9 +11,9 @@ from sklearn.model_selection import train_test_split
 import pandas as pd
 import os
 
-from tm.TalbeModificatorScheme import TalbeModificatorScheme
-from tm.TalbeModificatorOperationsEnum import TalbeModificatorOperationsEnum
-from tm.TalbeModificatorExecution import TalbeModificatorExecution
+from il.id.ImputeDesigner import ImputeDesigner
+from il.id.IDOperations import IDOperations
+from il.id.ImputeDesignerExecutor import ImputeDesignerExecutor
 
 
 # =========================================================
@@ -46,92 +46,91 @@ def loadDataFrame(train):
 
 # Cleans the table. Various operations are performed here to prepare the table for training and prediction.
 def manipulateTable(dataset, testing=False):
-    tms = TalbeModificatorScheme()
+    tms = ImputeDesigner()
 
     # Create a definition of what is to do
     # Dropping PasengerId and Name
-    tms.add('PassengerId', TalbeModificatorOperationsEnum.DROP)
-    tms.add('Name', TalbeModificatorOperationsEnum.DROP)
+    tms.add('PassengerId', IDOperations.DROP)
+    tms.add('Name', IDOperations.DROP)
     # Fill CryoSleep nana with Unknown and apply One Hot
-    tms.add('CryoSleep', TalbeModificatorOperationsEnum.TO_STR)
-    tms.add('CryoSleep', TalbeModificatorOperationsEnum.REPLACE,
+    tms.add('CryoSleep', IDOperations.TO_STR)
+    tms.add('CryoSleep', IDOperations.REPLACE,
             {'match': 'nan',
              'value': 'Unknown'})
-    tms.add('CryoSleep', TalbeModificatorOperationsEnum.ONE_HOT)
+    tms.add('CryoSleep', IDOperations.ONE_HOT)
     # Fill empty values on VIP with mode
-    tms.add('VIP', TalbeModificatorOperationsEnum.FILL_NAN,
-            {'strategy': 'most_frequent'})
-    tms.add('VIP', TalbeModificatorOperationsEnum.TO_INT)
+    tms.add('VIP', IDOperations.FILL_NAN, {'strategy': 'most_frequent'})
+    tms.add('VIP', IDOperations.TO_INT)
 
     # TODO: think if is better to have an if like this, or a param on add to execute on test mode
     # Convedrt Transported to 0 or 1
     if not testing:
         # This column is not present when training
-        tms.add('Transported', TalbeModificatorOperationsEnum.TO_INT)
+        tms.add('Transported', IDOperations.TO_INT)
 
     # Split Cabin and drop old column
-    tms.add('Cabin', TalbeModificatorOperationsEnum.SPLIT_BY,
+    tms.add('Cabin', IDOperations.SPLIT_BY,
             {'pattern': '/',
              'new_columns': ['Deck', 'Cabin_num', 'Side']})
-    tms.add('Cabin', TalbeModificatorOperationsEnum.DROP)
+    tms.add('Cabin', IDOperations.DROP)
 
     # Work on newly created columns
     # Fill nan with Mode and apply One Hot
-    tms.add('Deck', TalbeModificatorOperationsEnum.FILL_NAN,
+    tms.add('Deck', IDOperations.FILL_NAN,
             {'strategy': 'most_frequent'})
-    tms.add('Deck', TalbeModificatorOperationsEnum.ONE_HOT)
+    tms.add('Deck', IDOperations.ONE_HOT)
     # Fill nana with zeroes and convert to int
-    tms.add('Cabin_num', TalbeModificatorOperationsEnum.FILL_NAN,
+    tms.add('Cabin_num', IDOperations.FILL_NAN,
             {'strategy': 'constant',
              'fill_value': 0})
-    tms.add('Cabin_num', TalbeModificatorOperationsEnum.TO_INT)
+    tms.add('Cabin_num', IDOperations.TO_INT)
     # Encode to binary. P are tru and other are false.
-    tms.add('Side', TalbeModificatorOperationsEnum.ENCODE_TO_BINARY,
+    tms.add('Side', IDOperations.ENCODE_TO_BINARY,
             {'positive_label': 'P'})
 
     # Fill nan for: (replace with Mode)
-    tms.add('FoodCourt', TalbeModificatorOperationsEnum.FILL_NAN,
+    tms.add('FoodCourt', IDOperations.FILL_NAN,
             {'strategy': 'most_frequent'})
-    tms.add('ShoppingMall', TalbeModificatorOperationsEnum.FILL_NAN,
+    tms.add('ShoppingMall', IDOperations.FILL_NAN,
             {'strategy': 'most_frequent'})
-    tms.add('Spa', TalbeModificatorOperationsEnum.FILL_NAN,
+    tms.add('Spa', IDOperations.FILL_NAN,
             {'strategy': 'most_frequent'})
-    tms.add('VRDeck', TalbeModificatorOperationsEnum.FILL_NAN,
+    tms.add('VRDeck', IDOperations.FILL_NAN,
             {'strategy': 'most_frequent'})
-    tms.add('RoomService', TalbeModificatorOperationsEnum.FILL_NAN,
+    tms.add('RoomService', IDOperations.FILL_NAN,
             {'strategy': 'most_frequent'})
 
     # Filling nan with Unknown and apply One Hot
-    tms.add('HomePlanet', TalbeModificatorOperationsEnum.FILL_NAN,
+    tms.add('HomePlanet', IDOperations.FILL_NAN,
             {'strategy': 'constant',
              'fill_value': 'Unknown'})
-    tms.add('HomePlanet', TalbeModificatorOperationsEnum.ONE_HOT)
-    tms.add('Destination', TalbeModificatorOperationsEnum.FILL_NAN,
+    tms.add('HomePlanet', IDOperations.ONE_HOT)
+    tms.add('Destination', IDOperations.FILL_NAN,
             {'strategy': 'constant',
              'fill_value': 'Unknown'})
-    tms.add('Destination', TalbeModificatorOperationsEnum.ONE_HOT)
+    tms.add('Destination', IDOperations.ONE_HOT)
 
     # Fill age with median
-    tms.add('Age', TalbeModificatorOperationsEnum.FILL_NAN,
+    tms.add('Age', IDOperations.FILL_NAN,
             {'strategy': 'median'})
 
     # Create a new feature, calle TotalSpent, with all money spent by each traveler
     def fn(df): return df['RoomService'] + df['FoodCourt'] + \
         df['ShoppingMall'] + df['Spa'] + df['VRDeck']
-    tms.add('TotalSpent', TalbeModificatorOperationsEnum.CREATE_NEW_COLUMN,
+    tms.add('TotalSpent', IDOperations.CREATE_NEW_COLUMN,
             {'function': fn})
 
     # Lets supose that, people on cryo sleep will never spend money on stuff...
     columns_to_zero = ['TotalSpent', 'RoomService',
                        'FoodCourt', 'ShoppingMall', 'Spa', 'VRDeck']
     tms.add(columns_to_zero,
-            TalbeModificatorOperationsEnum.CONDITIONAL_SET_TO,
+            IDOperations.CONDITIONAL_SET_TO,
             {'value': 0,
              'condition_col': 'CryoSleep_True',
              'condition_value': 1})
 
     # Execute the definition over the dataframe
-    tme = TalbeModificatorExecution(tms)
+    tme = ImputeDesignerExecutor(tms)
     return tme.execute(dataset)
 
 
@@ -181,7 +180,7 @@ def trainingTime(pipeline, X, y):
 
     # Uncomment this line to se amazing graphs and data
     # printResults(conf_mat, cr)
-    return (pipeline, conf_mat, cr)
+    return pipeline
 
 
 # Evaluate given model
@@ -235,7 +234,7 @@ def testingTime(pipeline, testpath):
     test_df = loadDataFrame(testpath)
     submission_id = test_df.PassengerId
     # Clean test Table to same standards as the validation table
-    test_df = cleanTable(test_df, testing=True)
+    test_df = manipulateTable(test_df, testing=True)
     # ----------
 
     # Predict
@@ -312,13 +311,13 @@ executeCrossValidation(pipeline, X, y, cv=10, scoring='accuracy')
 
 # ----------
 # Trains the model
-# (pipeline, conf_mat, cr) = trainingTime(pipeline, X, y)
+pipeline = trainingTime(pipeline, X, y)
 # ----------
 
 # ----------
 # Submission - Testing Time
-# (n_predictions, output) = testingTime(pipeline, f'{data_path}/test.csv')
-# print(output.head())
+(n_predictions, output) = testingTime(pipeline, f'{data_path}/test.csv')
+print(output.head())
 # ----------
 # Generate Submission File
 # generateSubmissionFile(n_predictions, working_path)
