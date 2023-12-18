@@ -11,6 +11,10 @@ from sklearn.model_selection import train_test_split
 import pandas as pd
 import os
 
+from tm.TalbeModificatorScheme import TalbeModificatorScheme
+from tm.TalbeModificatorOperationsEnum import TalbeModificatorOperationsEnum
+from tm.TalbeModificatorExecution import TalbeModificatorExecution
+
 
 # =========================================================
 # =========================================================
@@ -18,6 +22,8 @@ import os
 # =========================================================
 
 # Function to list the artifacts
+
+
 def listArtifacts(path):
     for dirname, _, filenames in os.walk(path):
         for filename in filenames:
@@ -38,155 +44,95 @@ def loadDataFrame(train):
     return dataset_df
 
 
-# Class for manipulating the DataFrame with inline operations
-# The constructor accepts two attributes.
-# First, the DataFrame to be modified, and then the name of the column.
-# Each instance of the class is responsible for modifying only one column of the table.
-class TalbeModificator:
-    def __init__(self, datafame, columnName):
-        self.datafame = datafame
-        self.columnName = columnName
-
-    # Encode a colum to binary (0 or 1)
-    def encodeToBinary(self, positive_label):
-        self.datafame[self.columnName] = self.datafame[self.columnName].apply(
-            lambda x: 1 if x == positive_label else 0)
-        return self
-
-    # One Hot encode. Creates a new column for each value and then deletes the original column.
-    def oneHot(self):
-        dummies = pd.get_dummies(
-            self.datafame[self.columnName], prefix=self.columnName)
-        dummies = dummies.astype(int)
-
-        self.datafame = pd.concat(
-            [self.datafame.drop(self.columnName, axis=1), dummies], axis=1)
-        return self
-
-    # Fill nan with mode
-    def fillnaWithMode(self):
-        moda = self.datafame[self.columnName].mode()[0]
-        self.datafame[self.columnName].fillna(moda, inplace=True)
-        return self
-
-    # Fill nan with median value from specified column
-    def fillnaWithMedian(self):
-        col_median = self.datafame[self.columnName].median()
-        self.datafame[self.columnName].fillna(col_median, inplace=True)
-        return self
-
-    # Fill nana with zeroes
-    def fillnaWithZeroes(self):
-        self.datafame[self.columnName].fillna(0, inplace=True)
-        return self
-
-    # Fill nan with specified value
-    def fillnaWith(self, value):
-        self.datafame[self.columnName].fillna(value, inplace=True)
-        return self
-
-    # Replace specified value (valueToReplace) with valueToSet
-    def replaceWithValue(self, valueToReplace, valueToSet):
-        self.datafame[self.columnName] = self.datafame[self.columnName].replace(
-            valueToReplace, valueToSet)
-        return self
-
-    # Convert a column to int
-    def toInt(self):
-        self.datafame[self.columnName] = self.datafame[self.columnName].astype(
-            int)
-        return self
-
-    # Convert a column to string
-    def toStr(self):
-        self.datafame[self.columnName] = self.datafame[self.columnName].astype(
-            str)
-        return self
-
-    # Splits a column according to a pattern. The pattern should contain the token to be split,
-    # and newColumns should contain an array with the names of the new columns.
-    def split(self, pattern, newColumns):
-        self.datafame[newColumns] = self.datafame[self.columnName].str.split(
-            pattern, expand=True)
-        self.datafame = self.datafame.drop(self.columnName, axis=1)
-        return self
-
-    # Creates a new column with the name provided in the constructor. Func should be a lambda that returns the value for each column for each row.
-    def createNewColumn(self, func):
-        self.datafame[self.columnName] = func(self.datafame)
-        return self
-
-    # Returns the modified DataFrame.
-    def get(self):
-        return self.datafame
-
-
 # Cleans the table. Various operations are performed here to prepare the table for training and prediction.
-def cleanTable(dataset, testing=False):
-    # Preparing the dataset
+def manipulateTable(dataset, testing=False):
+    tms = TalbeModificatorScheme()
+
+    # Create a definition of what is to do
     # Dropping PasengerId and Name
-    dataset = dataset.drop(['PassengerId', 'Name'], axis=1)
-    print(dataset.head(5))
-    # Check missing values and print it
-    print(dataset.isnull().sum().sort_values(ascending=False))
-    # ----------
+    tms.add('PassengerId', TalbeModificatorOperationsEnum.DROP)
+    tms.add('Name', TalbeModificatorOperationsEnum.DROP)
+    # Fill CryoSleep nana with Unknown and apply One Hot
+    tms.add('CryoSleep', TalbeModificatorOperationsEnum.TO_STR)
+    tms.add('CryoSleep', TalbeModificatorOperationsEnum.REPLACE,
+            {'match': 'nan',
+             'value': 'Unknown'})
+    tms.add('CryoSleep', TalbeModificatorOperationsEnum.ONE_HOT)
+    # Fill empty values on VIP with mode
+    tms.add('VIP', TalbeModificatorOperationsEnum.FILL_NAN,
+            {'strategy': 'most_frequent'})
+    tms.add('VIP', TalbeModificatorOperationsEnum.TO_INT)
 
-    # Fill CryoSleep with more frequent and convert to -0 or 1
-    dataset = TalbeModificator(dataset, 'CryoSleep').toStr(
-    ).replaceWithValue('nan', 'Unknown').oneHot().get()
-    # Same with VIP
-    dataset = TalbeModificator(dataset, 'VIP').fillnaWithMode().get()
-
+    # TODO: think if is better to have an if like this, or a param on add to execute on test mode
     # Convedrt Transported to 0 or 1
     if not testing:
         # This column is not present when training
-        dataset = TalbeModificator(dataset, 'Transported').toInt().get()
+        tms.add('Transported', TalbeModificatorOperationsEnum.TO_INT)
 
-    # Split cabin and drop old column
-    dataset = TalbeModificator(dataset, 'Cabin').split(
-        '/', ["Deck", "Cabin_num", "Side"]).get()
+    # Split Cabin and drop old column
+    tms.add('Cabin', TalbeModificatorOperationsEnum.SPLIT_BY,
+            {'pattern': '/',
+             'new_columns': ['Deck', 'Cabin_num', 'Side']})
+    tms.add('Cabin', TalbeModificatorOperationsEnum.DROP)
+
+    # Work on newly created columns
+    # Fill nan with Mode and apply One Hot
+    tms.add('Deck', TalbeModificatorOperationsEnum.FILL_NAN,
+            {'strategy': 'most_frequent'})
+    tms.add('Deck', TalbeModificatorOperationsEnum.ONE_HOT)
+    # Fill nana with zeroes and convert to int
+    tms.add('Cabin_num', TalbeModificatorOperationsEnum.FILL_NAN,
+            {'strategy': 'constant',
+             'fill_value': 0})
+    tms.add('Cabin_num', TalbeModificatorOperationsEnum.TO_INT)
+    # Encode to binary. P are tru and other are false.
+    tms.add('Side', TalbeModificatorOperationsEnum.ENCODE_TO_BINARY,
+            {'positive_label': 'P'})
 
     # Fill nan for: (replace with Mode)
-    dataset = TalbeModificator(dataset, 'FoodCourt').fillnaWithMode().get()
-    dataset = TalbeModificator(dataset, 'ShoppingMall').fillnaWithMode().get()
-    dataset = TalbeModificator(dataset, 'Spa').fillnaWithMode().get()
-    dataset = TalbeModificator(dataset, 'VRDeck').fillnaWithMode().get()
-    dataset = TalbeModificator(dataset, 'RoomService').fillnaWithMode().get()
+    tms.add('FoodCourt', TalbeModificatorOperationsEnum.FILL_NAN,
+            {'strategy': 'most_frequent'})
+    tms.add('ShoppingMall', TalbeModificatorOperationsEnum.FILL_NAN,
+            {'strategy': 'most_frequent'})
+    tms.add('Spa', TalbeModificatorOperationsEnum.FILL_NAN,
+            {'strategy': 'most_frequent'})
+    tms.add('VRDeck', TalbeModificatorOperationsEnum.FILL_NAN,
+            {'strategy': 'most_frequent'})
+    tms.add('RoomService', TalbeModificatorOperationsEnum.FILL_NAN,
+            {'strategy': 'most_frequent'})
 
     # Filling nan with Unknown and apply One Hot
-    dataset = TalbeModificator(dataset, 'HomePlanet').fillnaWith(
-        'Unknown').oneHot().get()
-    dataset = TalbeModificator(dataset, 'Destination').fillnaWith(
-        'Unknown').oneHot().get()
-
-    # Fill nan with Mode and apply One Hot
-    dataset = TalbeModificator(dataset, 'Deck').fillnaWithMode().oneHot().get()
-    # Fill nana with zeroes and convert to int
-    dataset = TalbeModificator(
-        dataset, 'Cabin_num').fillnaWithZeroes().toInt().get()
-    # Encode to binary. P are tru and other are false.
-    dataset = TalbeModificator(dataset, 'Side').encodeToBinary('P').get()
+    tms.add('HomePlanet', TalbeModificatorOperationsEnum.FILL_NAN,
+            {'strategy': 'constant',
+             'fill_value': 'Unknown'})
+    tms.add('HomePlanet', TalbeModificatorOperationsEnum.ONE_HOT)
+    tms.add('Destination', TalbeModificatorOperationsEnum.FILL_NAN,
+            {'strategy': 'constant',
+             'fill_value': 'Unknown'})
+    tms.add('Destination', TalbeModificatorOperationsEnum.ONE_HOT)
 
     # Fill age with median
-    dataset = TalbeModificator(dataset, 'Age').fillnaWithMedian().get()
+    tms.add('Age', TalbeModificatorOperationsEnum.FILL_NAN,
+            {'strategy': 'median'})
 
-    # Create a new Feature, called TotalSpent
-    dataset = TalbeModificator(dataset, 'TotalSpent').createNewColumn(lambda df: df['RoomService'] + df['FoodCourt'] +
-                                                                      df['ShoppingMall'] + df['Spa'] + df['VRDeck']).get()
+    # Create a new feature, calle TotalSpent, with all money spent by each traveler
+    def fn(df): return df['RoomService'] + df['FoodCourt'] + \
+        df['ShoppingMall'] + df['Spa'] + df['VRDeck']
+    tms.add('TotalSpent', TalbeModificatorOperationsEnum.CREATE_NEW_COLUMN,
+            {'function': fn})
 
     # Lets supose that, people on cryo sleep will never spend money on stuff...
     columns_to_zero = ['TotalSpent', 'RoomService',
                        'FoodCourt', 'ShoppingMall', 'Spa', 'VRDeck']
-    dataset.loc[dataset['CryoSleep_True'] == 1, columns_to_zero] = 0
+    tms.add(columns_to_zero,
+            TalbeModificatorOperationsEnum.CONDITIONAL_SET_TO,
+            {'value': 0,
+             'condition_col': 'CryoSleep_True',
+             'condition_value': 1})
 
-    # Print modified table
-    print(dataset.head())
-    print(dataset.describe())
-    # check missing values
-    print(dataset.isnull().sum().sort_values(ascending=False))
-    print("Final train dataset shape is {}".format(dataset.shape))
-
-    return dataset
+    # Execute the definition over the dataframe
+    tme = TalbeModificatorExecution(tms)
+    return tme.execute(dataset)
 
 
 # Execute Cross Validation with a given pipeline and values
@@ -324,8 +270,22 @@ working_path = './'
 listArtifacts(data_path)
 # Load data
 dataset_df = loadDataFrame(f'{data_path}/train.csv')
+# ----------
+
+# ----------
+# Print table info before modifitaion
+print(dataset_df.head(5))
+# Check missing values and print it
+print(dataset_df.isnull().sum().sort_values(ascending=False))
 # Clean Data Table (Modification and preparation of the data)
-dataset_df = cleanTable(dataset_df)
+dataset_df = manipulateTable(dataset_df)
+# Print modified table
+print(dataset_df.head())
+print(dataset_df.describe())
+# check missing values
+print(dataset_df.isnull().sum().sort_values(ascending=False))
+print("Final train dataset shape is {}".format(dataset_df.shape))
+# ----------
 
 # ----------
 # Creates the X and y for training
@@ -352,14 +312,14 @@ executeCrossValidation(pipeline, X, y, cv=10, scoring='accuracy')
 
 # ----------
 # Trains the model
-(pipeline, conf_mat, cr) = trainingTime(pipeline, X, y)
+# (pipeline, conf_mat, cr) = trainingTime(pipeline, X, y)
 # ----------
 
 # ----------
 # Submission - Testing Time
-(n_predictions, output) = testingTime(pipeline, f'{data_path}/test.csv')
-print(output.head())
+# (n_predictions, output) = testingTime(pipeline, f'{data_path}/test.csv')
+# print(output.head())
 # ----------
 # Generate Submission File
-generateSubmissionFile(n_predictions, working_path)
+# generateSubmissionFile(n_predictions, working_path)
 # ----------
