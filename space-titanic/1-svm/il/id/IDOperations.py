@@ -13,3 +13,4 @@ class IDOperations(enum.Enum):
     ONE_HOT = 8
     CREATE_NEW_COLUMN = 9
     CONDITIONAL_SET_TO = 10
+    SEQUENCE = 11

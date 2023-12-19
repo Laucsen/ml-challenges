@@ -7,4 +7,4 @@ class FrameEvaluatorReport:
         self.test_accuracy = test_accuracy
 
     def print(self):
-        print(f'[{self.index}] - With CV score of: {self.scores.mean()} and Test/Train accuracy of {self.train_accuracy} / {self.test_accuracy}')
+        print(f'[{self.index + 1}] - With CV score of: {self.scores.mean()} and Test/Train accuracy of {self.train_accuracy} / {self.test_accuracy}')

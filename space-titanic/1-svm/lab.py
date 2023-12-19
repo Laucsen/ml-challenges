@@ -36,16 +36,33 @@ def evaluator(dataset, pipeline):
     frame = Frame([
         # 1. Dropping PasengerId
         ['PassengerId', IDOperations.DROP],
-        # 2. Teste with and without name column
-        ['Name', FEOperations.DROP_NO_DROP],
+        # 2. Test with and without name column
+        ['Name', IDOperations.DROP],
         # 3. Fill CryoSleep nan with Unknown and apply One Hot
-        ['CryoSleep', IDOperations.TO_STR],
-        ['CryoSleep', IDOperations.REPLACE, {
-            'match': 'nan',
-            'value': 'Unknown'}],
-        ['CryoSleep', IDOperations.ONE_HOT],
+        ['CryoSleep', FEOperations.SWITCH, {
+            'options': [
+                ['CryoSleep', IDOperations.SEQUENCE, {  # TODO: Add filter support to SEQUENCEs
+                    'sequence': [
+                        ['CryoSleep', IDOperations.TO_STR],
+                        ['CryoSleep', IDOperations.REPLACE, {
+                            'match': 'nan',
+                            'value': 'Unknown'}],
+                        ['CryoSleep', IDOperations.ONE_HOT],
+                    ]
+                }],
+                ['CryoSleep', IDOperations.SEQUENCE, {
+                    'sequence': [
+                        ['CryoSleep', IDOperations.FILL_NAN,
+                            {'strategy': 'most_frequent'}],
+                        ['CryoSleep', IDOperations.TO_INT],
+                    ]
+                }],
+                ['CryoSleep', IDOperations.DROP],
+            ]
+        }],
         # Fill empty values on VIP with mode
-        ['VIP', IDOperations.FILL_NAN, {'strategy': 'most_frequent'}],
+        ['VIP', FEOperations.FILL_NAN_ALL_STRATEGIES,
+            {'fill_value': 0}],
         ['VIP', IDOperations.TO_INT],
         # Transform Transported to Int, but not on test set
         # Passing empty options and the filter paramether
@@ -94,10 +111,11 @@ def evaluator(dataset, pipeline):
         # Create a new feature, calle TotalSpent, with all money spent by each traveler
         ['TotalSpent', IDOperations.CREATE_NEW_COLUMN, {'function': fn}],
         # Lets supose that, people on cryo sleep will never spend money on stuff...
-        [columns_to_zero, IDOperations.CONDITIONAL_SET_TO,
-            {'value': 0,
-             'condition_col': 'CryoSleep_True',
-             'condition_value': 1}],
+        # [columns_to_zero, IDOperations.CONDITIONAL_SET_TO,
+        #     {'value': 0,
+        #      'condition_col': 'CryoSleep_True',
+        #      'condition_value': 1}],
+        # TODO This later
     ])
 
     # Execute the definition over the dataframe

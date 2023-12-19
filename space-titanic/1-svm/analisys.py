@@ -50,11 +50,15 @@ def manipulateTable(dataset, testing=False):
         ['PassengerId', IDOperations.DROP],
         ['Name', IDOperations.DROP],
         # 2. Fill CryoSleep nan with Unknown and apply One Hot
-        ['CryoSleep', IDOperations.TO_STR],
-        ['CryoSleep', IDOperations.REPLACE, {
-            'match': 'nan',
-            'value': 'Unknown'}],
-        ['CryoSleep', IDOperations.ONE_HOT],
+        ['CryoSleep', IDOperations.SEQUENCE, {
+            'sequence': [
+                ['CryoSleep', IDOperations.TO_STR],
+                ['CryoSleep', IDOperations.REPLACE, {
+                    'match': 'nan',
+                    'value': 'Unknown'}],
+                ['CryoSleep', IDOperations.ONE_HOT],
+            ]
+        }],
         # Fill empty values on VIP with mode
         ['VIP', IDOperations.FILL_NAN, {'strategy': 'most_frequent'}],
         ['VIP', IDOperations.TO_INT],

@@ -8,6 +8,73 @@ class ImputeDesignerExecutor:
     def __init__(self, tfs: ImputeDesigner):
         self.tfs = tfs
 
+    def apply_operation(self, dataframe: pd.DataFrame, idOperation: IDOperations, columnName: str, opOptions):
+        if idOperation == IDOperations.DROP:
+            dataframe = dataframe.drop(columnName, axis=1)
+        elif idOperation == IDOperations.TO_STR:
+            dataframe[columnName] = dataframe[columnName].astype(str)
+        elif idOperation == IDOperations.TO_INT:
+            dataframe[columnName] = dataframe[columnName].astype(int)
+        elif idOperation == IDOperations.ENCODE_TO_BINARY:
+            # TODO: check for right arguments
+            positive_label = opOptions['positive_label']
+            dataframe[columnName] = dataframe[columnName].apply(
+                lambda x: 1 if x == positive_label else 0)
+        elif idOperation == IDOperations.FILL_NAN:
+            # TODO: check for right arguments
+            strategy = opOptions['strategy']
+            strategy_value = 0
+            if strategy == 'most_frequent':
+                strategy_value = dataframe[columnName].mode()[0]
+            elif strategy == 'constant':
+                strategy_value = opOptions['fill_value']
+            elif strategy == 'median':
+                strategy_value = dataframe[columnName].median()
+            elif strategy == 'mean':
+                strategy_value = dataframe[columnName].mean()
+            else:
+                print('ERROR: todo other strategies')
+            dataframe[columnName].fillna(strategy_value, inplace=True)
+        elif idOperation == IDOperations.REPLACE:
+            # TODO: check for right arguments
+            match = opOptions['match']
+            value = opOptions['value']
+            dataframe[columnName] = dataframe[columnName].replace(match, value)
+        elif idOperation == IDOperations.SPLIT_BY:
+            # TODO: check for right arguments
+            pattern = opOptions['pattern']
+            new_columns = opOptions['new_columns']
+            dataframe[new_columns] = dataframe[columnName].str.split(
+                pattern, expand=True)
+        elif idOperation == IDOperations.ONE_HOT:
+            dummies = pd.get_dummies(dataframe[columnName], prefix=columnName)
+            dummies = dummies.astype(int)
+
+            dataframe = pd.concat(
+                [dataframe.drop(columnName, axis=1), dummies], axis=1)
+        elif idOperation == IDOperations.CREATE_NEW_COLUMN:
+            # TODO: check for right arguments
+            function = opOptions['function']
+            dataframe[columnName] = function(dataframe)
+        elif idOperation == IDOperations.CONDITIONAL_SET_TO:
+            # TODO: check for right arguments
+            value = opOptions['value']
+            condition_col = opOptions['condition_col']
+            condition_value = opOptions['condition_value']
+            dataframe.loc[dataframe[condition_col]
+                          == condition_value, columnName] = value
+        elif idOperation == IDOperations.SEQUENCE:
+            # TODO: check for right arguments
+            sequence = opOptions['sequence']
+            for opt in sequence:
+                extract_n_options = opt[2] if len(opt) >= 3 else {}
+                dataframe = self.apply_operation(
+                    dataframe, opt[1], opt[0], extract_n_options)
+        else:
+            raise Exception(f'Invalid IDOperation: {idOperation}')
+
+        return dataframe
+
     def execute(self, dataframe: pd.DataFrame, filter=None):
         operations = self.tfs.getOperations()
         for op in operations:
@@ -20,59 +87,7 @@ class ImputeDesignerExecutor:
                 if filter in cop_filters:
                     continue
 
-            if cop_op == IDOperations.DROP:
-                dataframe = dataframe.drop(cop_name, axis=1)
-            elif cop_op == IDOperations.TO_STR:
-                dataframe[cop_name] = dataframe[cop_name].astype(str)
-            elif cop_op == IDOperations.TO_INT:
-                dataframe[cop_name] = dataframe[cop_name].astype(int)
-            elif cop_op == IDOperations.ENCODE_TO_BINARY:
-                # TODO: check for right arguments
-                positive_label = cop_options['positive_label']
-                dataframe[cop_name] = dataframe[cop_name].apply(
-                    lambda x: 1 if x == positive_label else 0)
-            elif cop_op == IDOperations.FILL_NAN:
-                # TODO: check for right arguments
-                strategy = cop_options['strategy']
-                strategy_value = 0
-                if strategy == 'most_frequent':
-                    strategy_value = dataframe[cop_name].mode()[0]
-                elif strategy == 'constant':
-                    strategy_value = cop_options['fill_value']
-                elif strategy == 'median':
-                    strategy_value = dataframe[cop_name].median()
-                else:
-                    print('ERROR: todo other strategies')
-                dataframe[cop_name].fillna(strategy_value, inplace=True)
-            elif cop_op == IDOperations.REPLACE:
-                # TODO: check for right arguments
-                match = cop_options['match']
-                value = cop_options['value']
-                dataframe[cop_name] = dataframe[cop_name].replace(match, value)
-            elif cop_op == IDOperations.SPLIT_BY:
-                # TODO: check for right arguments
-                pattern = cop_options['pattern']
-                new_columns = cop_options['new_columns']
-                dataframe[new_columns] = dataframe[cop_name].str.split(
-                    pattern, expand=True)
-            elif cop_op == IDOperations.ONE_HOT:
-                dummies = pd.get_dummies(dataframe[cop_name], prefix=cop_name)
-                dummies = dummies.astype(int)
-
-                dataframe = pd.concat(
-                    [dataframe.drop(cop_name, axis=1), dummies], axis=1)
-            elif cop_op == IDOperations.CREATE_NEW_COLUMN:
-                # TODO: check for right arguments
-                function = cop_options['function']
-                dataframe[cop_name] = function(dataframe)
-            elif cop_op == IDOperations.CONDITIONAL_SET_TO:
-                # TODO: check for right arguments
-                value = cop_options['value']
-                condition_col = cop_options['condition_col']
-                condition_value = cop_options['condition_value']
-                dataframe.loc[dataframe[condition_col]
-                              == condition_value, cop_name] = value
-            else:
-                print('ERROR')
+            dataframe = self.apply_operation(
+                dataframe, cop_op, cop_name, cop_options)
 
         return dataframe

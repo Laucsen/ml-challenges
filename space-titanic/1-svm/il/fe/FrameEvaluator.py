@@ -70,7 +70,7 @@ class FrameEvaluator:
                 pipeline, X, y, cv=self.CV, scoring='accuracy')
 
             print(
-                f'[Slice {index}] Cross-Validation Accuracy: {scores.mean()} (+/- {scores.std() * 2})')
+                f'[Slice {index + 1}] Cross-Validation Accuracy: {scores.mean()} (+/- {scores.std() * 2})')
             # ----------
 
             # ----------
@@ -90,13 +90,13 @@ class FrameEvaluator:
             train_accuracy = pipeline.score(X_train, y_train)
             test_accuracy = pipeline.score(X_test, y_test)
             print(
-                f'[Slice {index}] Train/Test accuracy: {train_accuracy} / {test_accuracy}')
+                f'[Slice {index + 1}] Train/Test accuracy: {train_accuracy} / {test_accuracy}')
 
             # I set myself a threshould of 2,5% for my work
             threshould = 0.025
             # Check for possible overfit
             if train_accuracy > test_accuracy + threshould:
-                print(f'[Slice {index}] Possível overfitting detectado.')
+                print(f'[Slice {index + 1}] Possível overfitting detectado.')
 
             frer = FrameEvaluatorReport(
                 index,
