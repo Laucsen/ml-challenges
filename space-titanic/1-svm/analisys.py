@@ -280,6 +280,7 @@ y = dataset_df["Transported"]
 pipeline = Pipeline([
     ('scaler', StandardScaler()),
     ('svm', SVC(kernel='rbf', gamma=0.01, C=10)),
+    # ('mlp', MLPClassifier(max_iter=500, verbose=True))
 ])
 # ----------
 

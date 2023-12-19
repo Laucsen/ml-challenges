@@ -27,5 +27,9 @@ class ImputeDesigner:
         ti = ImputeDesignerItem(columnName, operation, options)
         self.mods.append(ti)
 
+    # Add an ImputeDesignerItem to this Imputer
+    def add_design(self, design: ImputeDesignerItem):
+        self.mods.append(design)
+
     def getOperations(self):
         return self.mods
